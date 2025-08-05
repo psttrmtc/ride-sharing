@@ -76,7 +76,7 @@ func (h *gRPCHandler) CreateTrip(ctx context.Context, req *pb.CreateTripRequest)
 	}
 
 	// Add a comment at the end of the function to publish an event on Async Comms module.
-	if err := h.publisher.PublishTripCreated(ctx); err != nil {
+	if err := h.publisher.PublishTripCreated(ctx, trip); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to publish the trip created event: %v", err)
 	}
 
