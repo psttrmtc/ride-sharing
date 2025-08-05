@@ -1,7 +1,16 @@
 package messaging
 
+import (
+	"context"
+	"fmt"
+	"log"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
+
 type RabbitMQ struct {
-	conn *amqp.Connection
+	conn    *amqp.Connection
+	Channel *amqp.Channel
 }
 
 func NewRabbitMQ(uri string) (*RabbitMQ, error) {
@@ -11,16 +20,57 @@ func NewRabbitMQ(uri string) (*RabbitMQ, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to RabbitMQ: %v", err)
 	}
+	ch, err := conn.Channel()
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("faild to create channel: %v")
+	}
 
 	rmq := &RabbitMQ{
-		conn: conn,
+		conn:    conn,
+		Channel: ch,
+	}
+	if err := rmq.setupExchangesAndQueues(); err != nil {
+		// Clean up if setup fails
+		rmq.Close()
+		return nil, fmt.Errorf("faild to setup exchanges and queue: %v", err)
 	}
 
 	return rmq, nil
 }
 
-func (r *RabbitMQ) Close(){
+func (r *RabbitMQ) PublishMessage(ctx context.Context, routingKey string, message string) error {
+	return r.Channel.PublishWithContext(ctx,
+		"",      // exchange
+		"hello", // routing key
+		false,   // mandatory
+		false,   // immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        []byte(message),
+		})
+}
+
+func (r *RabbitMQ) setupExchangesAndQueues() error {
+	_, err := r.Channel.QueueDeclare(
+		"Hello", // name
+		false,   // durable
+		false,   // delete when unused
+		false,   // exclusive
+		false,   // no wait
+		nil,     // arguments
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return nil
+}
+
+func (r *RabbitMQ) Close() {
 	if r.conn != nil {
 		r.conn.Close()
+	}
+	if r.Channel != nil {
+		r.Channel.Close()
 	}
 }
