@@ -4,8 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"ride-sharing/shared/contracts"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+)
+
+const (
+	TripExchange = "trip"
 )
 
 type RabbitMQ struct {
@@ -93,11 +98,13 @@ func (r *RabbitMQ) ConsumeMessages(queueName string, handler MessageHandler) err
 }
 
 func (r *RabbitMQ) PublishMessage(ctx context.Context, routingKey string, message string) error {
+	log.Printf("Publishing message with routing key: %s", routingKey)
+
 	return r.Channel.PublishWithContext(ctx,
-		"",      // exchange
-		"hello", // routing key
-		false,   // mandatory
-		false,   // immediate
+		TripExchange, // exchange
+		routingKey,   // routing key
+		false,        // mandatory
+		false,        // immediate
 		amqp.Publishing{
 			ContentType:  "text/plain",
 			Body:         []byte(message),
@@ -106,16 +113,53 @@ func (r *RabbitMQ) PublishMessage(ctx context.Context, routingKey string, messag
 }
 
 func (r *RabbitMQ) setupExchangesAndQueues() error {
-	_, err := r.Channel.QueueDeclare(
-		"Hello", // name
-		true,    // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no wait
-		nil,     // arguments
+	err := r.Channel.ExchangeDeclare(
+		TripExchange, // name
+		"topic",      // type
+		true,         // durable
+		false,        // auto-deleted
+		false,        // internal
+		false,        // no-wait
+		nil,          // arguments
+	)
+	if err != nil {
+		return fmt.Errorf("failed to declare exchange: %s: %v", TripExchange, err)
+	}
+	if err := r.declareAndBindQueue(
+		FindAvailableDriversQueue,
+		[]string{
+			contracts.TripEventCreated,
+			contracts.TripEventDriverNotInterested,
+		},
+		TripExchange,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *RabbitMQ) declareAndBindQueue(queueName string, messageTypes []string, exchange string) error {
+	q, err := r.Channel.QueueDeclare(
+		queueName, // name
+		true,      // durable
+		false,     // delete when used
+		false,     // exclusive
+		false,     // no-wait
+		nil,       // arguments
 	)
 	if err != nil {
 		log.Fatal(err)
+	}
+	for _, msg := range messageTypes {
+		if err := r.Channel.QueueBind(
+			q.Name,   // queue name
+			msg,      // routing key
+			exchange, // exchange
+			false,
+			nil,
+		); err != nil {
+			return fmt.Errorf("failed to bind queue to %s: %v", queueName, err)
+		}
 	}
 	return nil
 }
