@@ -23,7 +23,7 @@ func NewRabbitMQ(uri string) (*RabbitMQ, error) {
 	ch, err := conn.Channel()
 	if err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("faild to create channel: %v")
+		return nil, fmt.Errorf("faild to create channel: %v", err)
 	}
 
 	rmq := &RabbitMQ{
@@ -37,6 +37,35 @@ func NewRabbitMQ(uri string) (*RabbitMQ, error) {
 	}
 
 	return rmq, nil
+}
+
+type MessageHandler func(context.Context, amqp.Delivery) error
+
+func (r *RabbitMQ) ConsumeMessages(queueName string, handler MessageHandler) error {
+	msgs, err := r.Channel.Consume(
+		queueName, // queue
+		"",        // consumer
+		true,      // auto-ack
+		false,     // exclusive
+		false,     // no-local
+		false,     // no-wait
+		nil,       // args
+	)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	go func() {
+		for msg := range msgs {
+			log.Printf("Received a message: %s", msg.Body)
+			if err := handler(ctx, msg); err != nil {
+				log.Fatalf("failed to handle the message: %v", err)
+			}
+		}
+	}()
+	return nil
 }
 
 func (r *RabbitMQ) PublishMessage(ctx context.Context, routingKey string, message string) error {
