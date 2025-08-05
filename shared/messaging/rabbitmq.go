@@ -42,6 +42,18 @@ func NewRabbitMQ(uri string) (*RabbitMQ, error) {
 type MessageHandler func(context.Context, amqp.Delivery) error
 
 func (r *RabbitMQ) ConsumeMessages(queueName string, handler MessageHandler) error {
+	// Set prefetch count to 1 for fair dispatch
+	// This tells RabbitMQ not to give more than one message to a service at a time.
+	// The worker will only get the next message after it has acknowledged the previous one.
+	err := r.Channel.Qos(
+		1,     // prefetchCount: limit to 1 unacknowledged message per consumer
+		0,     // prefetchSize: No specific limit on message size
+		false, // global: Apply prefetch to each consumer individually
+	)
+	if err != nil {
+		return fmt.Errorf("failed to set QoS: %v", err)
+	}
+
 	msgs, err := r.Channel.Consume(
 		queueName, // queue
 		"",        // consumer
@@ -66,15 +78,14 @@ func (r *RabbitMQ) ConsumeMessages(queueName string, handler MessageHandler) err
 				// Nack the message. Set requeue to false to avoid immediate redelivery loops.
 				// Consider a dead-letter exchange (DLQ) or a more sophisticated retry mechanism for production.
 				if nackErr := msg.Nack(false, false); nackErr != nil {
-					log.Printf("ERROR: Faild to Nack message: %v", nackErr)
+					log.Printf("ERROR: Failed to Nack message: %v", nackErr)
 				}
 				// Continue to the next message
 				continue
-
-				// Only Ack if the handler succeeds
-				if ackErr := msg.Ack(false); ackErr != nil {
-					log.Printf("Error: Failed to Ack message: %v.Message body: %s", ackErr, msg.Body)
-				}
+			}
+			// Only Ack if the handler succeeds
+			if ackErr := msg.Ack(false); ackErr != nil {
+				log.Printf("Error: Failed to Ack message: %v.Message body: %s", ackErr, msg.Body)
 			}
 		}
 	}()
