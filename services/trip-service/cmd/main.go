@@ -17,6 +17,8 @@ import (
 var GrpcAddr = ":9093"
 
 func main() {
+	rabbitMqURI := env.GetString("RABBITMQ_URI", "amqp://guest:guest@rabbitmq:5672/")
+
 	inmemRepo := repository.NewInmemRepository()
 	svc := service.NewService(inmemRepo)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -28,10 +30,19 @@ func main() {
 		<-sigCh
 		cancel()
 	}()
+
 	lis, err := net.Listen("tcp", GrpcAddr)
 	if err != nil {
 		log.Fatal("failed to listen: %v", err)
 	}
+
+	//RabbitMQ Connection
+	rabbitmq, err := messaging.NewRabbitMQ(rabbitMqURI)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rabbitmq.Close()
+	log.Println("Starting RabbitMQ connection")
 
 	grpcServer := grpcserver.NewServer()
 	grpc.NewGRPCHandler(grpcServer, svc)

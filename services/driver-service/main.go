@@ -14,6 +14,7 @@ import (
 var GrpcAddr = ":9092"
 
 func main() {
+	rabbitMqURI := env.GetString("RabbitMQ_URI", "amqp://guest:guest@rabbitmq:5672/")
 	ctx, cancel := context.WithCancel(context.Background())
 
 	defer cancel()
@@ -30,7 +31,17 @@ func main() {
 	}
 
 	svc := NewService()
+	
+	// RabbitMQ connection
+	rabbitmq, err := messaging.NewRabbitMQ(rabbitMqURI)
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	defer rabbitmq.Close()
 
+	log.Println("Starting RabbitMQ connection")
+	
 	// Starting the gRPC server
 	grpcServer := grpcserver.NewServer()
 	NewGrpcHandler(grpcServer, svc)
