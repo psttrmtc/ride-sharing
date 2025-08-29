@@ -141,6 +141,14 @@ func (r *RabbitMQ) setupExchangesAndQueues() error {
 	); err != nil {
 		return err
 	}
+	if err := r.declareAndBindQueue(
+		DriverCmdTripRequestQueue,
+		[]string{contracts.DriverCmdTripRequest},
+		TripExchange,
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -156,7 +164,7 @@ func (r *RabbitMQ) declareAndBindQueue(queueName string, messageTypes []string, 
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, msg := range messageTypes {	
+	for _, msg := range messageTypes {
 		if err := r.Channel.QueueBind(
 			q.Name,   // queue name
 			msg,      // routing key

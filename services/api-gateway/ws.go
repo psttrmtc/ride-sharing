@@ -17,7 +17,7 @@ var (
 	connManager = messaging.NewConnectionManager()
 )
 
-func handleRidersWebSocket(w http.ResponseWriter, r *http.Request) {
+func handleRidersWebSocket(w http.ResponseWriter, r *http.Request, rb *messaging.RabbitMQ) {
 	conn, err := connManager.Upgrade(w, r)
 	if err != nil {
 		log.Printf("Websocket upgrade failed: %v", err)
@@ -46,7 +46,7 @@ func handleRidersWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleDriversWebSocket(w http.ResponseWriter, r *http.Request) {
+func handleDriversWebSocket(w http.ResponseWriter, r *http.Request, rb *messaging.RabbitMQ) {
 	conn, err := connManager.Upgrade(w, r)
 
 	if err != nil {
@@ -101,9 +101,21 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request) {
 	if err := connManager.SendMessage(userID, contracts.WSMessage{
 		Type: "driver.cmd.register",
 		Data: driverData.Driver,
-	});err != nil {
+	}); err != nil {
 		log.Printf("Error sending message: %v", err)
 		return
+	}
+
+	// Initialize queue consumers
+	queues := []string{
+		messaging.DriverCmdTripRequestQueue,
+	}
+	for _, q := range queues {
+		consumer := messaging.NewQueueConsumer(rb, connManager, q)
+
+		if err := consumer.Start(); err != nil {
+			log.Printf("Failed to start consumer for queue: %s err: %v", q, err)
+		}
 	}
 
 	for {
