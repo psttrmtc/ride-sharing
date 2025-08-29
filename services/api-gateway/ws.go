@@ -5,23 +5,20 @@ import (
 	"net/http"
 	"ride-sharing/services/api-gateway/grpc_clients"
 	"ride-sharing/shared/contracts"
+	"ride-sharing/shared/messaging"
 	"ride-sharing/shared/proto/driver"
-
-	"github.com/gorilla/websocket"
 )
 
 // var (
 // 	connManager = messaging.NewConnectionManager()
 // )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
+var (
+	connManager = messaging.NewConnectionManager()
+)
 
 func handleRidersWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := connManager.Upgrade(w, r)
 	if err != nil {
 		log.Printf("Websocket upgrade failed: %v", err)
 		return
@@ -34,6 +31,11 @@ func handleRidersWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Println("No user ID provided")
 		return
 	}
+
+	// Add connection to manager
+	connManager.Add(userID, conn)
+	defer connManager.Remove(userID)
+
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
@@ -45,7 +47,7 @@ func handleRidersWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDriversWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := connManager.Upgrade(w, r)
 
 	if err != nil {
 		log.Printf("Websocket upgrade failed: %v", err)
@@ -64,6 +66,10 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Println("No package slug provided")
 		return
 	}
+
+	//Add connection to manager
+	connManager.Add(userID, conn)
+
 	ctx := r.Context()
 
 	driverService, err := grpc_clients.NewDriverServiceClient()
@@ -72,11 +78,14 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 	defer func() {
+		connManager.Remove(userID)
+
 		driverService.Client.UnregisterDriver(ctx, &driver.RegisterDriverRequest{
 			DriverID:    userID,
 			PackageSlug: packageSlug,
 		})
 		driverService.Close()
+
 		log.Println("Driver unregistered: ", userID)
 	}()
 
@@ -89,11 +98,10 @@ func handleDriversWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg := contracts.WSMessage{
+	if err := connManager.SendMessage(userID, contracts.WSMessage{
 		Type: "driver.cmd.register",
 		Data: driverData.Driver,
-	}
-	if err := conn.WriteJSON(msg); err != nil {
+	});err != nil {
 		log.Printf("Error sending message: %v", err)
 		return
 	}
