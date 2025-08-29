@@ -131,6 +131,7 @@ func (r *RabbitMQ) setupExchangesAndQueues() error {
 	if err != nil {
 		return fmt.Errorf("failed to declare exchange: %s: %v", TripExchange, err)
 	}
+
 	if err := r.declareAndBindQueue(
 		FindAvailableDriversQueue,
 		[]string{
@@ -141,9 +142,26 @@ func (r *RabbitMQ) setupExchangesAndQueues() error {
 	); err != nil {
 		return err
 	}
+
 	if err := r.declareAndBindQueue(
 		DriverCmdTripRequestQueue,
 		[]string{contracts.DriverCmdTripRequest},
+		TripExchange,
+	); err != nil {
+		return err
+	}
+
+	if err := r.declareAndBindQueue(
+		DriverTripResponseQueue,
+		[]string{contracts.DriverCmdTripAccept, contracts.DriverCmdTripDecline},
+		TripExchange,
+	); err != nil {
+		return err
+	}
+
+	if err := r.declareAndBindQueue(
+		NotifyDriverNoDriversFoundQueue,
+		[]string{contracts.TripEventNoDriversFound},
 		TripExchange,
 	); err != nil {
 		return err
