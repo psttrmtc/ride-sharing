@@ -156,7 +156,7 @@ func (r *RabbitMQ) declareAndBindQueue(queueName string, messageTypes []string, 
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, msg := range messageTypes {
+	for _, msg := range messageTypes {	
 		if err := r.Channel.QueueBind(
 			q.Name,   // queue name
 			msg,      // routing key

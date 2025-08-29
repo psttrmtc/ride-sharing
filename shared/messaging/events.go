@@ -1,8 +1,8 @@
 package messaging
 
-import pb "ride-sharing/share/proto/trip"
+import pb "ride-sharing/shared/proto/trip"
 
-const(
+const (
 	FindAvailableDriversQueue = "find_available_drivers"
 )
 
