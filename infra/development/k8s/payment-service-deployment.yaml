@@ -35,12 +35,12 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: STRIPE_CANCEL_URL
-            #STRIPE credentials
-            # - name: STRIPE_SECRET_KEY
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: stripe-secrets
-            #       key: stripe-secret-key
+            #Stripe credentials
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-secrets
+                  key: stripe-secret-key
 
             # RABBITMQ credentials
             - name: RABBITMQ_URI
