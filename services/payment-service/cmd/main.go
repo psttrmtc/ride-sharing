@@ -5,6 +5,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"ride-sharing/services/payment-service/internal/events"
+	"ride-sharing/services/payment-service/internal/infrastructure/stripe"
+	"ride-sharing/services/payment-service/internal/service"
 	"ride-sharing/services/payment-service/pkg/types"
 	"ride-sharing/shared/env"
 	"ride-sharing/shared/messaging"
@@ -39,6 +42,12 @@ func main() {
 		log.Fatalf("STRIPE_SECRET_KEY is not set")
 		return
 	}
+	// Stripe Processor
+	paymentProcessor := stripe.NewStripeClient(stripeCfg)
+
+	// Service
+
+	svc := service.NewPaymentService(paymentProcessor)
 
 	// RabbitMQ connection
 	rabbitmq, err := messaging.NewRabbitMQ(rabbitMqURI)
@@ -48,7 +57,12 @@ func main() {
 	defer rabbitmq.Close()
 	log.Println("Starting RabbitMQ connection")
 
+	// Trip consumer
+	tripConsumer := events.NewTripConsumer(rabbitmq, svc)
+
+	go tripConsumer.Listen()
+
 	// Wait for shutdown signal
-	<- ctx.Done()
+	<-ctx.Done()
 	log.Println("Shutting down payment service...")
 }
